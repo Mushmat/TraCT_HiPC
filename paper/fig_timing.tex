@@ -1,0 +1,82 @@
+% sequence-style timing diagrams for the three KV transfer paths
+\tikzset{
+  life/.style={draw=black!55, line width=0.5pt},
+  hdr/.style={draw=black!70, fill=black!6, rounded corners=1pt, inner sep=2pt, align=center, font=\fontsize{6}{6.6}\selectfont\bfseries},
+  lbl/.style={font=\fontsize{5.7}{6.3}\selectfont, inner sep=1pt, align=left},
+  ctl/.style={-{Stealth[length=3pt,width=2.4pt]}, line width=0.5pt, draw=black!80},
+  poll/.style={-{Stealth[length=3pt,width=2.4pt]}, line width=0.5pt, dashed, draw=black!70},
+  data/.style={-{Stealth[length=4pt,width=3.4pt]}, line width=1.8pt, draw=blue!65!black},
+  loopbox/.style={draw=black!45, dashed, line width=0.4pt, rounded corners=1pt},
+  note/.style={draw=black!40, fill=yellow!12, font=\fontsize{5.5}{6.1}\selectfont, inner sep=1.5pt, align=left},
+  sub/.style={font=\fontsize{5}{5.5}\selectfont},
+}
+\newcommand{\sn}[1]{\textbf{\color{blue!60!black}#1}\,}
+\newcommand{\sepbar}{\,$|$\,}
+
+\begin{minipage}[t]{0.285\textwidth}\centering
+\begin{tikzpicture}[x=1cm,y=-0.9cm]
+  \def\A{0.35}\def\B{3.05}\def\C{4.6}
+  \node[hdr] at (\A,0) {Prefill};
+  \node[hdr] at (\B,0) {SHM segment\\[-1pt]{\fontsize{5}{5}\selectfont\mdseries hdr\sepbar table\sepbar data}};
+  \node[hdr] at (\C,0) {Decode};
+  \foreach \x in {\A,\B,\C} \draw[life] (\x,0.32) -- (\x,5.3);
+  \draw[ctl] (\A,0.72) -- node[lbl,above]{shm\_open, mmap, pre-fault} (\B,0.72);
+  \draw[ctl] (\C,1.05) -- node[lbl,above]{attach} (\B,1.05);
+  \draw[loopbox] (0.02,1.25) rectangle (4.93,5.15);
+  \node[lbl,anchor=north west,font=\fontsize{5.4}{6}\selectfont\itshape] at (0.04,1.27) {for each KV block};
+  \draw[ctl] (\A,1.8) -- node[lbl,above]{\sn{1}lock (process-shared mutex)} (\B,1.8);
+  \draw[ctl] (\A,2.2) -- node[lbl,above]{\sn{2}probe; off $\mathrel{+}=$ size; unlock} (\B,2.2);
+  \draw[data] (\A,2.65) -- node[lbl,above]{\sn{3}memcpy payload $\rightarrow$ data[off]} (\B,2.65);
+  \draw[ctl] (\A,3.1) -- node[lbl,above]{\sn{4}entry\{h, off, len\}; valid=1} (\B,3.1);
+  \draw[poll] (\C,3.55) -- node[lbl,above]{\sn{5}poll valid} (\B,3.55);
+  \draw[poll] (\C,3.78) -- (\B,3.78);
+  \draw[data] (\B,4.25) -- node[lbl,above]{\sn{6}read data[off]} (\C,4.25);
+  \node[note] at (1.7,4.75) {load/store only, no NIC\\[-1pt](stands in for CXL)};
+\end{tikzpicture}\\[-1pt]
+{\fontsize{7}{8}\selectfont (a) SHM baseline, one node}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.285\textwidth}\centering
+\begin{tikzpicture}[x=1cm,y=-0.9cm]
+  \def\A{0.4}\def\B{2.5}\def\C{4.55}
+  \node[hdr] at (\A,0) {Prefill};
+  \node[hdr] at (\B,0) {HCA / IB\\[-1pt]{\fontsize{5}{5}\selectfont\mdseries RC queue pair}};
+  \node[hdr] at (\C,0) {Decode\\[-1pt]{\fontsize{5}{5}\selectfont\mdseries reg.\ KV cache}};
+  \foreach \x in {\A,\B,\C} \draw[life] (\x,0.32) -- (\x,5.3);
+  \draw[ctl,{Stealth[length=3pt,width=2.4pt]}-{Stealth[length=3pt,width=2.4pt]}] (\A,0.72) -- node[lbl,above,pos=0.5]{TCP: QPN, LID, PSN, addr, rkey} (\C,0.72);
+  \node[lbl,fill=white] at (2.48,1.0) {QP INIT$\rightarrow$RTR$\rightarrow$RTS (both sides)};
+  \draw[ctl] (\A,1.42) -- node[lbl,above,pos=0.5]{warm-up WRITE\_IMM (not timed)} (\C,1.42);
+  \draw[loopbox] (0.02,1.6) rectangle (4.93,5.15);
+  \node[lbl,anchor=north west,font=\fontsize{5.4}{6}\selectfont\itshape] at (0.04,1.62) {for each KV block};
+  \draw[ctl] (\C,2.15) -- node[lbl,above]{\sn{1}post RECV} (\B,2.15);
+  \draw[data] (\A,2.6) -- node[lbl,above]{\sn{2}WRITE\_IMM (imm)} (\B,2.6);
+  \draw[data] (\B,3.05) -- node[lbl,above]{\sn{3}DMA $\rightarrow$ ring[slot]} (\C,3.05);
+  \draw[ctl] (\B,3.5) -- node[lbl,above]{\sn{4}RECV CQE (imm)} (\C,3.5);
+  \draw[ctl] (\B,3.95) -- node[lbl,above]{\sn{5}send CQE: stop} (\A,3.95);
+  \node[note] at (2.48,4.62) {one-sided WRITE; the immediate\\[-1pt]is the only thing that wakes decode};
+\end{tikzpicture}\\[-1pt]
+{\fontsize{7}{8}\selectfont (b) RDMA baseline, one node}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.41\textwidth}\centering
+\begin{tikzpicture}[x=1cm,y=-0.9cm]
+  \def\A{0.45}\def\B{4.05}\def\C{6.85}
+  \node[hdr] at (\A,0) {Writer\\[-1pt]{\fontsize{5}{5}\selectfont\mdseries compute01}};
+  \node[hdr] at (\B,0) {Host: one MR + lock manager\\[-1pt]{\fontsize{5}{5}\selectfont\mdseries hdr\sepbar lock[17][8]\sepbar table[4096]\sepbar data \quad (compute00)}};
+  \node[hdr] at (\C,0) {Reader\\[-1pt]{\fontsize{5}{5}\selectfont\mdseries compute02}};
+  \foreach \x in {\A,\B,\C} \draw[life] (\x,0.32) -- (\x,5.3);
+  \draw[loopbox] (0.05,0.5) rectangle (7.2,5.15);
+  \node[lbl,anchor=north west,font=\fontsize{5.4}{6}\selectfont\itshape] at (0.07,0.52) {for each KV block};
+  \draw[ctl] (\A,1.05) -- node[lbl,above]{\sn{1}WRITE lock[0][n]=W (allocator lock)} (\B,1.05);
+  \draw[ctl] (\B+0.05,1.13) .. controls (\B+0.6,1.13) and (\B+0.6,1.45) .. (\B+0.05,1.45);
+  \node[lbl,anchor=west] at (\B+0.55,1.29) {\sn{2}manager: one W$\rightarrow$L};
+  \draw[poll] (\A,1.7) -- node[lbl,above]{\sn{3}READ lock[0][n] until L} (\B,1.7);
+  \draw[ctl] (\A,2.15) -- node[lbl,above]{\sn{4}READ + WRITE next\_off; WRITE I} (\B,2.15);
+  \draw[data] (\A,2.6) -- node[lbl,above]{\sn{5}WRITE payload $\rightarrow$ data[off], no lock} (\B,2.6);
+  \draw[poll] (\A,3.05) -- node[lbl,above]{\sn{6}stripe s: WRITE W, READ until L} (\B,3.05);
+  \draw[ctl] (\A,3.5) -- node[lbl,above]{\sn{7}READ probe; WRITE entry, valid=1; I} (\B,3.5);
+  \draw[poll] (\C,4.0) -- node[lbl,above]{\sn{8}READ entry until valid} (\B,4.0);
+  \draw[data] (\B,4.45) -- node[lbl,above]{\sn{9}READ data[off]} (\C,4.45);
+  \node[note,anchor=west] at (0.15,4.4) {offsets, not pointers;\\[-1pt]s = 1 + partition(hash)};
+  \node[lbl,font=\fontsize{5.4}{6}\selectfont\itshape,anchor=east] at (6.78,4.9) {reader takes no lock};
+\end{tikzpicture}\\[-1pt]
+{\fontsize{7}{8}\selectfont (c) TraCT-style layer over RDMA, three nodes}
+\end{minipage}
