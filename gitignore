@@ -1,0 +1,17 @@
+# build output
+*.o
+shm_prefill
+shm_decode
+kv_prefill
+kv_decode
+tract_host
+tract_prefill
+tract_decode
+test_lock
+shmem_kv
+mpi_rma_kv
+*_ucx
+
+# editor/OS junk
+.DS_Store
+*.swp
